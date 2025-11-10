@@ -1,307 +1,77 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Bridge (Custom) — USDC Sepolia → Monad • Admin Mode</title>
-<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LayerZero Manual Redeem</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
-  :root{
-    --bg:#0f1711; --card:#142418; --mut:#26462e; --fld:#101c12;
-    --acc1:#62f19e; --acc2:#32b85a; --ok1:#22c55e; --ok2:#16a34a;
-    --txt:#eaf5e4; --sub:#9adba6;
-  }
-  *{box-sizing:border-box}
-  body{
-    margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-    background: radial-gradient(900px 520px at 20% -10%,#122815,#0f1711);
-    color:var(--txt); font-family:Poppins,system-ui,Arial,sans-serif; padding:56px 12px 48px;
-  }
-  .wrap{width:min(540px,95vw)}
-  .card{
-    background: linear-gradient(180deg, rgba(20,36,24,.94), rgba(16,28,18,.94));
-    border:1px solid var(--mut); border-radius:16px; padding:22px;
-    box-shadow:0 12px 28px rgba(0,0,0,.55); text-align:center;
-  }
-  h2{margin:0 0 6px; color:#53d16f}
-  h3{margin:14px 0 6px; color:#9adba6; font-size:16px}
-  p{margin:0 0 10px; color:var(--sub)}
-  label{display:block; font-size:12px; color:var(--sub); margin-top:8px; text-align:left}
-  input{
-    width:100%; padding:12px; margin-top:6px; border-radius:10px;
-    border:1px solid var(--mut); background:var(--fld); color:#fff; font-size:14px;
-  }
-  button{
-    width:100%; padding:12px; border-radius:10px; border:0; font-weight:700; cursor:pointer;
-    margin-top:10px; font-size:15px;
-  }
-  .primary{ background:linear-gradient(90deg,var(--acc1),var(--acc2)); color:#071008 }
-  .ok{ background:linear-gradient(90deg,var(--ok1),var(--ok2)); color:#fff }
-  .muted{ background:#243a28; color:#cfead5 }
-  .row{display:flex; gap:8px; flex-wrap:wrap}
-  .row > *{flex:1}
-  .hint{font-size:12px; color:#bfe5ca; margin-top:6px}
-  pre{
-    white-space:pre-wrap; background:var(--fld); border:1px solid var(--mut); border-radius:12px;
-    padding:12px; margin-top:12px; min-height:120px; color:#dff8e6; font-size:13px; max-height:320px; overflow:auto; text-align:left;
-  }
-  footer{position:fixed;bottom:10px;left:0;right:0;text-align:center;color:#8ecfa0;font-size:12px}
-  .badge{display:inline-block;padding:4px 8px;border:1px solid var(--mut);border-radius:8px;color:#bfe5ca;font-size:12px}
-  .success{color:#72e29a}
-  .warn{color:#ffd36b}
+body{background:#0b1220;color:#e6edf3;font-family:system-ui,Arial;margin:0;display:grid;place-items:center;min-height:100vh}
+.card{width:min(720px,95vw);background:#121a2a;border:1px solid #22304a;border-radius:12px;padding:18px}
+input,button{width:100%;padding:12px;border-radius:10px;margin-top:8px;font-size:14px}
+input{border:1px solid #22304a;background:#0f1625;color:#fff}
+button{border:0;background:linear-gradient(90deg,#6ee7ff,#7c5cff);color:#06101a;font-weight:700;cursor:pointer}
+pre{white-space:pre-wrap;background:#0f1625;border:1px solid #22304a;border-radius:10px;padding:10px;margin-top:10px;min-height:90px}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1}
 </style>
 </head>
 <body>
-<div class="wrap">
-  <div class="card">
-    <h2>🌉 Bridge (Custom) — USDC Sepolia → Monad</h2>
-    <p>Mode Admin: grant MINTER + mint mirror (bukan Wormhole/LayerZero resmi)</p>
-
-    <div id="status" class="hint">Wallet: -</div>
-    <div class="hint">
-      <span id="badgeMinter" class="badge">MINTER: unknown</span>
-    </div>
-    <div id="balSep" class="hint">USDC Sepolia: -</div>
-    <div id="balMon" class="hint">USDC Monad: -</div>
-
-    <h3>Step 1 — Lock di Sepolia</h3>
-    <label>Jumlah (USDC, desimal 6)</label>
-    <input id="amt" type="number" placeholder="misal: 10" />
-    <label>Bridge Vault (alamat tujuan lock di Sepolia)</label>
-    <input id="vault" placeholder="0x... (alamat milik Bos / burn vault testnet)" />
-    <div class="row">
-      <button id="btnConn" class="primary">🔌 Connect</button>
-      <button id="btnSep" class="muted">🔁 Switch → Sepolia</button>
-    </div>
-    <button id="btnLock" class="ok" disabled>🔐 Lock USDC (transfer)</button>
-
-    <h3>Step 2 — Admin (Monad)</h3>
-    <label>Target Minter (default: wallet Bos)</label>
-    <input id="minter" placeholder="0x... (kosongkan = wallet kamu)" />
-    <div class="row">
-      <button id="btnMon" class="muted">🔁 Switch → Monad</button>
-      <button id="btnGrant" class="primary" disabled>🛡️ Grant MINTER_ROLE</button>
-    </div>
-
-    <h3>Step 3 — Mint Mirror di Monad</h3>
-    <label>Tx hash (opsional, catatan)</label>
-    <input id="txhash" placeholder="0x..." />
-    <button id="btnMint" class="ok" disabled>🪙 Mint Mirror USDC</button>
-
-    <pre id="log">log siap...</pre>
-    <div class="hint">
-      • <span class="warn">Grant MINTER</span> hanya bisa oleh admin kontrak USDC Monad. <br/>
-      • <span class="success">Mint</span> butuh wallet kamu punya MINTER_ROLE.
-    </div>
+<div class="card">
+  <h2>🌐 LayerZero Manual Redeem</h2>
+  <div class="row">
+    <input id="srcEid" value="30101" />
+    <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" />
   </div>
+  <input id="sender32" value="0x000000000000000000000000cc1ae8cf5d3904cef3360a9532b477529b177cce" />
+  <input id="payload"  value="0x0000000000000000000000004d02af17a29cda77416a1f60eae9092bb6d9c02600038d7ea4c68000" />
+  <div class="row">
+    <button id="connect">🔌 Connect</button>
+    <button id="redeem">🚀 Send lzReceive()</button>
+  </div>
+  <pre id="log">log siap...</pre>
 </div>
 
-<footer>by thdx</footer>
-
 <script>
-/** ========= Config ========= */
-const ADDR = {
-  USDC_SEPOLIA: "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238",
-  USDC_MONAD  : "0xf817257fed379853cDe0fa4F97AB987181B1E5Ea"
-};
-const NET = {
-  SEPOLIA: { id:11155111, hex:"0xaa36a7", name:"Sepolia" },
-  MONAD  : { id:10143,    hex:"0x279F",   name:"Monad Testnet", rpc:"https://testnet-rpc.monad.xyz", explorer:"https://testnet.monvision.io" }
-};
-// AccessControl: MINTER_ROLE = keccak256("MINTER_ROLE")
-const MINTER_ROLE = "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6";
+const $=id=>document.getElementById(id);
+const log=m=>{const el=$("log");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;console.log(m);};
+const LZ_ABI=["function lzReceive(uint32,bytes32,bytes,address) external"];
 
-const ABI_ERC20 = [
-  "function balanceOf(address) view returns (uint256)",
-  "function transfer(address,uint256) returns (bool)",
-  "function decimals() view returns (uint8)",
-  "function symbol() view returns (string)"
-];
-// Kontrak USDC Monad diasumsikan OpenZeppelin AccessControl + mint
-const ABI_MONAD = [
-  "function mint(address to, uint256 amount) external",
-  "function hasRole(bytes32 role, address account) external view returns (bool)",
-  "function grantRole(bytes32 role, address account) external"
-];
+let provider,signer,me;
 
-const $  = (id)=>document.getElementById(id);
-const log= (m)=>{ const el=$("log"); el.textContent += (el.textContent? "\n":"")+m; el.scrollTop=el.scrollHeight; console.log(m); };
-
-let provider, signer, me;
-
-/** ========= Helpers ========= */
-async function ensureProvider(){
-  if(!window.ethereum) throw new Error("Aktifkan MetaMask / OKX Wallet, Bos.");
-  if(!provider) provider = new ethers.providers.Web3Provider(window.ethereum, "any");
-}
 async function connect(){
   try{
-    await ensureProvider();
+    if(!window.ethereum) throw new Error("Buka dengan MetaMask/OKX/Trust.");
+    provider=new ethers.providers.Web3Provider(window.ethereum,"any");
     await provider.send("eth_requestAccounts",[]);
-    signer = provider.getSigner();
-    me = await signer.getAddress();
-    const net = await provider.getNetwork();
-    $("status").textContent = `Wallet: ${me.slice(0,6)}…${me.slice(-4)} | Chain: ${net.chainId}`;
-    $("btnLock").disabled = false;
-    $("btnGrant").disabled = false;
-    $("btnMint").disabled = false;
-    await refreshBalances();
-    await updateMinterBadge();
+    signer=provider.getSigner();
+    me=await signer.getAddress();
+    const net=await provider.getNetwork();
     log(`✅ Connected: ${me}\nChain: ${net.chainId}`);
-  }catch(e){ log("❌ Connect error: " + (e.message||e)); }
-}
-async function switchTo(chain){
-  try{
-    await window.ethereum.request({ method:"wallet_switchEthereumChain", params:[{ chainId: chain.hex }] });
-    const net = await provider.getNetwork();
-    $("status").textContent = `Wallet: ${me?me.slice(0,6)+"…"+me.slice(-4):"-"} | Chain: ${net.chainId}`;
-    await refreshBalances();
-    await updateMinterBadge();
-    log(`🔁 Switched to ${chain.name}`);
-  }catch(e){
-    if(e.code===4902 && chain.rpc){
-      await window.ethereum.request({ method:"wallet_addEthereumChain", params:[{
-        chainId: chain.hex, chainName: chain.name, rpcUrls:[chain.rpc],
-        blockExplorerUrls:[chain.explorer].filter(Boolean),
-        nativeCurrency:{ name:"ETH", symbol:"ETH", decimals:18 }
-      }]} );
-      log(`➕ Network ${chain.name} added. Switch lagi jika perlu.`);
-    }else{
-      log("⚠️ Switch gagal: " + (e.message||e));
-    }
-  }
-}
-function fmt6(bn){ try{ return Number(ethers.utils.formatUnits(bn,6)); }catch{ return "-"; } }
-
-/** ========= Balances ========= */
-async function refreshBalances(){
-  try{
-    const ercSep = new ethers.Contract(ADDR.USDC_SEPOLIA, ABI_ERC20, provider);
-    const bSep   = me ? await ercSep.balanceOf(me) : ethers.BigNumber.from(0);
-    $("balSep").textContent = `USDC Sepolia: ${fmt6(bSep)}`;
-  }catch{ $("balSep").textContent = "USDC Sepolia: -"; }
-
-  try{
-    const ercMon = new ethers.Contract(ADDR.USDC_MONAD, ABI_ERC20, provider);
-    const bMon   = me ? await ercMon.balanceOf(me) : ethers.BigNumber.from(0);
-    $("balMon").textContent = `USDC Monad: ${fmt6(bMon)}`;
-  }catch{ $("balMon").textContent = "USDC Monad: -"; }
+  }catch(e){ log("❌ Connect error: "+(e.message||e)); }
 }
 
-/** ========= Badge MINTER ========= */
-async function updateMinterBadge(){
+async function redeem(){
   try{
-    const mon = new ethers.Contract(ADDR.USDC_MONAD, ABI_MONAD, provider);
-    const has = me ? await mon.hasRole(MINTER_ROLE, me) : false;
-    $("badgeMinter").textContent = `MINTER: ${has ? "YES" : "NO"}`;
-    $("badgeMinter").style.borderColor = has ? "#2e7a4f" : "#665a2e";
-    $("badgeMinter").style.color = has ? "#72e29a" : "#ffd36b";
-  }catch{
-    $("badgeMinter").textContent = "MINTER: unknown";
-  }
-}
+    const srcEid = Number($("srcEid").value.trim());
+    const sender = $("sender32").value.trim();
+    const payload= $("payload").value.trim();
+    const exec   = ethers.utils.getAddress($("executor").value.trim());
 
-/** ========= Step 1: Lock (Sepolia) ========= */
-async function lockSepolia(){
-  try{
-    if(!signer) await connect();
-    const net = await provider.getNetwork();
-    if (net.chainId !== NET.SEPOLIA.id){
-      log("🔁 Switch ke Sepolia dulu, Bos.");
-      return;
-    }
-    const amtStr = $("amt").value.trim();
-    const vault  = $("vault").value.trim();
-    if(!amtStr) return log("⚠️ Isi jumlah USDC dulu.");
-    if(!/^0x[0-9a-fA-F]{40}$/.test(vault)) return log("⚠️ Alamat vault invalid.");
+    if(!/^0x[0-9a-fA-F]{64}$/.test(sender)) return log("⚠️ sender32 harus 32-byte hex.");
+    if(!/^0x[0-9a-fA-F]+$/.test(payload))   return log("⚠️ payload harus hex 0x…");
 
-    const amt = ethers.utils.parseUnits(amtStr, 6);
-    const token = new ethers.Contract(ADDR.USDC_SEPOLIA, ABI_ERC20, signer);
-
-    log(`🔐 Lock: transfer ${amtStr} USDC → ${vault.slice(0,6)}…${vault.slice(-4)}`);
-    const tx = await token.transfer(vault, amt, { gasLimit: 120000 });
-    log(`⏳ TX (Sepolia): ${tx.hash}`);
-    $("txhash").value = tx.hash;
+    const c = new ethers.Contract(exec, LZ_ABI, signer);
+    log("🚀 Calling lzReceive()…");
+    const tx = await c.lzReceive(srcEid, sender, payload, exec, { gasLimit: 600000 });
+    log(`⏳ TX: ${tx.hash}`);
     const rc = await tx.wait();
-    log(`✅ Locked di block ${rc.blockNumber}. Simpan txhash untuk arsip.`);
-    await refreshBalances();
+    log(`✅ Delivered at block ${rc.blockNumber}`);
   }catch(e){
-    log("❌ Lock error: " + (e.error?.message || e.reason || e.message || String(e)));
+    log("❌ Redeem error: "+(e.data?.message||e.error?.message||e.reason||e.message||String(e)));
   }
 }
 
-/** ========= Step 2: Grant MINTER (Monad) ========= */
-async function grantMinter(){
-  try{
-    if(!signer) await connect();
-    const net = await provider.getNetwork();
-    if (net.chainId !== NET.MONAD.id){
-      log("🔁 Switch ke Monad Testnet dulu, Bos.");
-      return;
-    }
-    const to = $("minter").value.trim() || me;
-    if(!/^0x[0-9a-fA-F]{40}$/.test(to)) return log("⚠️ Alamat target minter invalid.");
-
-    const mon = new ethers.Contract(ADDR.USDC_MONAD, ABI_MONAD, signer);
-    log(`🛡️ Grant MINTER_ROLE → ${to.slice(0,6)}…${to.slice(-4)}`);
-    const tx = await mon.grantRole(MINTER_ROLE, to, { gasLimit: 150000 });
-    log(`⏳ TX (grant): ${tx.hash}`);
-    const rc = await tx.wait();
-    log(`✅ MINTER_ROLE granted di block ${rc.blockNumber}.`);
-    await updateMinterBadge();
-  }catch(e){
-    const msg = (e.data?.message || e.error?.message || e.reason || e.message || String(e));
-    log("❌ Grant error: " + msg);
-    if (/missing role|only.+admin|access control/i.test(msg)) {
-      log("💡 Wallet ini bukan admin kontrak. Gunakan admin contract untuk grantRole.");
-    }
-  }
-}
-
-/** ========= Step 3: Mint (Monad) ========= */
-async function mintMonad(){
-  try{
-    if(!signer) await connect();
-    const net = await provider.getNetwork();
-    if (net.chainId !== NET.MONAD.id){
-      log("🔁 Switch ke Monad Testnet dulu, Bos.");
-      return;
-    }
-    const amtStr = $("amt").value.trim();
-    if(!amtStr) return log("⚠️ Isi jumlah dulu.");
-    const amt = ethers.utils.parseUnits(amtStr, 6);
-
-    const mon = new ethers.Contract(ADDR.USDC_MONAD, ABI_MONAD, signer);
-
-    // pre-check (nice UX)
-    try{
-      const has = await mon.hasRole(MINTER_ROLE, me);
-      if(!has) log("⚠️ Peringatan: wallet kamu belum MINTER — transaksi bisa revert.");
-    }catch{/* abaikan jika kontrak tidak expose hasRole */}
-
-    log(`🪙 Mint mirror: ${amtStr} USDC → ${me.slice(0,6)}…${me.slice(-4)}`);
-    const tx = await mon.mint(me, amt, { gasLimit: 150000 });
-    log(`⏳ TX (Monad): ${tx.hash}`);
-    const rc = await tx.wait();
-    log(`✅ Minted di block ${rc.blockNumber}.`);
-    await refreshBalances();
-  }catch(e){
-    const msg = (e.data?.message || e.error?.message || e.reason || e.message || String(e));
-    log("❌ Mint error: " + msg);
-    if (/access control|minter|role/i.test(msg)) {
-      log("💡 Kontrak USDC Monad membatasi MINTER. Pastikan grantRole sukses terlebih dahulu.");
-    }
-  }
-}
-
-/** ========= Bindings ========= */
-$("btnConn").onclick  = connect;
-$("btnSep").onclick   = () => switchTo(NET.SEPOLIA);
-$("btnMon").onclick   = () => switchTo(NET.MONAD);
-$("btnLock").onclick  = lockSepolia;
-$("btnGrant").onclick = grantMinter;
-$("btnMint").onclick  = mintMonad;
+$("connect").onclick=connect;
+$("redeem").onclick=redeem;
 </script>
 </body>
 </html>
