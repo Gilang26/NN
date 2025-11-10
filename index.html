@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Bridge Testnet Stable — Bos Deluxe Edition</title>
+<script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+<style>
+body {
+  font-family: 'Poppins', sans-serif;
+  background: #0f1711;
+  color: #eaf5e4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
+.card {
+  background: #142418;
+  border: 1px solid #26462e;
+  border-radius: 16px;
+  padding: 26px;
+  width: min(440px, 90vw);
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.55);
+}
+h2 { color: #53d16f; margin: 0 0 6px; }
+p { margin: 0 0 12px; color: #9adba6; }
+button {
+  width: 100%; padding: 12px; border: 0; border-radius: 10px;
+  font-weight: 700; margin-top: 10px; font-size: 15px; cursor: pointer;
+}
+.primary { background: linear-gradient(90deg,#62f19e,#32b85a); color: #061006; }
+.ok { background: linear-gradient(90deg,#22c55e,#16a34a); color: #fff; }
+.neutral { background: #263b2b; color: #bfe5ca; }
+input {
+  width: 100%; padding: 12px; margin-top: 8px; border-radius: 10px;
+  border: 1px solid #26462e; background: #101c12; color: #eaf5e4; font-size: 14px;
+}
+pre {
+  background: #101c12; border: 1px solid #26462e; border-radius: 8px;
+  padding: 12px; margin-top: 12px; font-size: 13px; color: #cfead5;
+  text-align: left; white-space: pre-wrap; min-height: 100px; overflow-y: auto;
+}
+footer { margin-top: 15px; font-size: 13px; color: #74b383; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h2>🌉 Bridge Testnet Stable</h2>
+    <p>USDC (Sepolia) → Monad Testnet</p>
+    <p id="balance">Saldo: -</p>
+
+    <input id="amount" type="number" placeholder="Jumlah (misal: 10)" />
+    <button id="connect" class="primary">🔌 Connect Wallet</button>
+    <button id="approve" class="primary" disabled>✅ Approve</button>
+    <button id="bridge" class="ok" disabled>🚀 Bridge Now</button>
+    <button id="check" class="neutral" disabled>🛰️ Check Status</button>
+    <pre id="log">log siap...</pre>
+  </div>
+  <footer>by thdx</footer>
+
+<script>
+(function(){
+  const log = m => { const el=document.getElementById("log"); el.textContent += "\\n"+m; el.scrollTop=el.scrollHeight; console.log(m); };
+
+  const USDC = "0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238";
+  const BRIDGE = "0x6c5aAE4622B835058A41879bA5e128019B9047d6";
+  const DEST_CHAIN = 31041; // Monad testnet
+  const RECIPIENT = "0x0000000000000000000000004d02aF17A29cdA77416A1F60Eae9092BB6d9c026";
+
+  const ERC20_ABI = [
+    "function approve(address,uint256) returns(bool)",
+    "function balanceOf(address) view returns(uint256)"
+  ];
+  const BRIDGE_ABI = [
+    "function transferTokens(address,uint256,uint16,bytes32,uint256,uint32)"
+  ];
+
+  let provider, signer, me, lastTx = null;
+
+  async function connect(){
+    try {
+      if(!window.ethereum) throw new Error("Gunakan MetaMask / OKX Wallet, Bos!");
+      provider = new ethers.providers.Web3Provider(window.ethereum, "any");
+      await provider.send("eth_requestAccounts", []);
+      signer = provider.getSigner();
+      me = await signer.getAddress();
+      const net = await provider.getNetwork();
+      log(`✅ Connected: ${me}\\nChain: ${net.chainId}`);
+      document.getElementById("approve").disabled = false;
+      document.getElementById("bridge").disabled = false;
+      updateBalance();
+    } catch(e){ log("❌ Connect error: "+e.message); }
+  }
+
+  async function updateBalance(){
+    try {
+      const erc20 = new ethers.Contract(USDC, ERC20_ABI, provider);
+      const bal = await erc20.balanceOf(me);
+      const val = Number(ethers.utils.formatUnits(bal, 6));
+      document.getElementById("balance").textContent = `Saldo: ${val} USDC`;
+    } catch(e){ log("⚠️ Gagal baca saldo: "+e.message); }
+  }
+
+  async function approve(){
+    try {
+      const amountStr = document.getElementById("amount").value.trim();
+      if(!amountStr) return log("⚠️ Masukkan jumlah token dulu, Bos.");
+      const amt = ethers.utils.parseUnits(amountStr, 6);
+      const token = new ethers.Contract(USDC, ERC20_ABI, signer);
+      log("🧾 Approving USDC...");
+      const tx = await token.approve(BRIDGE, amt);
+      log(`⏳ Approve TX: ${tx.hash}`);
+      await tx.wait();
+      log("✅ Approve sukses!");
+      updateBalance();
+    } catch(e){ log("❌ Approve error: "+(e.message||e)); }
+  }
+
+  async function bridgeNow(){
+    try {
+      const amountStr = document.getElementById("amount").value.trim();
+      if(!amountStr) return log("⚠️ Masukkan jumlah token.");
+      const amt = ethers.utils.parseUnits(amountStr, 6);
+      const bridge = new ethers.Contract(BRIDGE, BRIDGE_ABI, signer);
+      log("🚀 Mengirim token...");
+      const tx = await bridge.transferTokens(USDC, amt, DEST_CHAIN, RECIPIENT, 0, Math.floor(Date.now()/1000));
+      log(`⏳ TX: ${tx.hash}`);
+      lastTx = tx.hash;
+      document.getElementById("check").disabled = false;
+      await tx.wait();
+      log("✅ Bridge sukses! Tunggu token muncul di Monad.");
+      updateBalance();
+    } catch(e){ log("❌ Bridge error: "+(e.message||e)); }
+  }
+
+  async function checkStatus(){
+    if(!lastTx) return log("⚠️ Belum ada TX hash.");
+    try {
+      log("🛰️ Cek status di Wormhole...");
+      const url = `https://wormholescan.io/#/tx/${lastTx}?network=Testnet`;
+      window.open(url, "_blank");
+    } catch(e){ log("❌ Check error: "+(e.message||e)); }
+  }
+
+  document.getElementById("connect").onclick = connect;
+  document.getElementById("approve").onclick = approve;
+  document.getElementById("bridge").onclick = bridgeNow;
+  document.getElementById("check").onclick = checkStatus;
+})();
+</script>
+</body>
+</html>
