@@ -7,23 +7,45 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
 :root {
-  --bg:#f5fff7; --card:#ffffff; --mut:#cde6d3; --fld:#ecf8ed; 
+  --bg:#f5fff7; --card:#ffffff; --mut:#cde6d3; --fld:#ecf8ed;
   --acc:#34c759; --ok:#22c55e; --warn:#facc15;
 }
-body { margin:0; background:var(--bg); font-family:"Poppins",sans-serif; color:#111; display:flex; flex-direction:column; align-items:center; }
-header { display:flex; align-items:center; gap:10px; padding:14px 20px; width:100%; box-shadow:0 1px 4px rgba(0,0,0,.05); background:#fff; }
+body {
+  margin:0; background:var(--bg); font-family:"Poppins",sans-serif;
+  color:#111; display:flex; flex-direction:column; align-items:center;
+}
+header {
+  display:flex; align-items:center; gap:10px;
+  padding:14px 20px; width:100%;
+  box-shadow:0 1px 4px rgba(0,0,0,.05); background:#fff;
+}
 header img { height:30px; }
 h1 { margin:0; font-size:18px; font-weight:600; color:#111; }
 .tabs { margin-top:20px; display:flex; gap:10px; }
-.tab { background:#fff; border:1px solid var(--mut); border-radius:8px; padding:8px 18px; cursor:pointer; font-weight:600; }
+.tab {
+  background:#fff; border:1px solid var(--mut);
+  border-radius:8px; padding:8px 18px; cursor:pointer; font-weight:600;
+}
 .tab.active { background:var(--acc); color:#fff; border-color:var(--acc); }
-.card { width:min(480px,90vw); background:var(--card); border:1px solid var(--mut); border-radius:16px; padding:22px; box-shadow:0 4px 10px rgba(0,0,0,.08); margin-top:20px; }
-input,button { width:100%; padding:12px; margin-top:8px; border-radius:10px; font-size:15px; }
+.card {
+  width:min(480px,90vw); background:var(--card);
+  border:1px solid var(--mut); border-radius:16px;
+  padding:22px; box-shadow:0 4px 10px rgba(0,0,0,.08); margin-top:20px;
+}
+input,button {
+  width:100%; padding:12px; margin-top:8px; border-radius:10px; font-size:15px;
+}
 input { border:1px solid var(--mut); background:var(--fld); }
-button { border:0; font-weight:700; cursor:pointer; transition:.2s; }
+button {
+  border:0; font-weight:700; cursor:pointer; transition:.2s;
+}
 button.primary { background:linear-gradient(90deg,#34d058,#28a745); color:#fff; }
 button.ok { background:linear-gradient(90deg,#22c55e,#16a34a); color:#fff; }
-pre { background:var(--fld); border:1px solid var(--mut); border-radius:10px; padding:10px; margin-top:12px; font-size:13px; white-space:pre-wrap; }
+pre {
+  background:var(--fld); border:1px solid var(--mut);
+  border-radius:10px; padding:10px; margin-top:12px;
+  font-size:13px; white-space:pre-wrap;
+}
 footer { margin:30px 0 10px; color:#6b6b6b; font-size:14px; }
 </style>
 </head>
@@ -39,6 +61,7 @@ footer { margin:30px 0 10px; color:#6b6b6b; font-size:14px; }
   <div class="tab" id="tabRedeem">🔁 Redeem</div>
 </div>
 
+<!-- Bridge Card -->
 <div class="card" id="bridgeCard">
   <h2>🌉 Bridge USDT0 → Stable</h2>
   <input id="amount" type="number" placeholder="Jumlah token (misal 10)" />
@@ -48,6 +71,7 @@ footer { margin:30px 0 10px; color:#6b6b6b; font-size:14px; }
   <pre id="logBridge">log siap...</pre>
 </div>
 
+<!-- Redeem Card -->
 <div class="card" id="redeemCard" style="display:none">
   <h2>🔁 Manual Redeem (LayerZero)</h2>
   <input id="srcEid" value="30101" placeholder="srcEid (Sepolia)" />
@@ -66,7 +90,6 @@ const tabBridge=document.getElementById("tabBridge");
 const tabRedeem=document.getElementById("tabRedeem");
 const bridgeCard=document.getElementById("bridgeCard");
 const redeemCard=document.getElementById("redeemCard");
-
 tabBridge.onclick=()=>{tabBridge.classList.add("active");tabRedeem.classList.remove("active");bridgeCard.style.display="block";redeemCard.style.display="none";}
 tabRedeem.onclick=()=>{tabRedeem.classList.add("active");tabBridge.classList.remove("active");bridgeCard.style.display="none";redeemCard.style.display="block";}
 
@@ -118,6 +141,7 @@ function initBridge(){
       const amountStr=document.getElementById("amount").value.trim();
       if(!amountStr)return log("⚠️ Masukkan jumlah token.");
       const amountLD=ethers.utils.parseUnits(amountStr,"6");
+      const me=await signer.getAddress();
       const to32="0x"+me.replace(/^0x/,"").padStart(64,"0");
       const oft=new ethers.Contract(adapter,OFT_ABI,signer);
       const sendParam=[dstEid,to32,amountLD,amountLD,"0x","0x","0x"];
@@ -153,16 +177,19 @@ async function redeem(){
     const srcEid=Number(document.getElementById("srcEid").value.trim());
     const sender=document.getElementById("sender32").value.trim();
     const payload=document.getElementById("payload").value.trim();
-    const execRaw=document.getElementById("executor").value.trim().replace(/\s+/g,"");
+    let execRaw=document.getElementById("executor").value.trim().replace(/[^\da-fx]/gi,"").toLowerCase();
+    if(!/^0x[0-9a-f]{40}$/.test(execRaw))throw new Error("Executor tidak valid: "+execRaw);
     const exec=ethers.utils.getAddress(execRaw);
-    if(!/^0x[0-9a-fA-F]{64}$/.test(sender))return logR("⚠️ sender32 harus 32-byte hex.");
-    if(!/^0x[0-9a-fA-F]+$/.test(payload))return logR("⚠️ payload harus hex 0x…");
+
+    if(!/^0x[0-9a-fA-F]{64}$/.test(sender)) return logR("⚠️ sender32 harus 32-byte hex.");
+    if(!/^0x[0-9a-fA-F]+$/.test(payload))   return logR("⚠️ payload harus hex 0x…");
     const c=new ethers.Contract(exec,LZ_ABI,signerR);
     logR(`🚀 Executor valid: ${exec}`);
     const tx=await c.lzReceive(srcEid,sender,payload,exec,{gasLimit:600000});
-    logR(`⏳ TX: ${tx.hash}`);const rc=await tx.wait();
+    logR(`⏳ TX: ${tx.hash}`);
+    const rc=await tx.wait();
     logR(`✅ Delivered at block ${rc.blockNumber}`);
-  }catch(e){logR("❌ Redeem error: "+(e.data?.message||e.message));}
+  }catch(e){logR("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
 
 document.getElementById("connectRedeem").onclick=connectRedeem;
