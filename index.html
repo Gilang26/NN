@@ -3,206 +3,103 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bridge Testnet Stable</title>
+<title>LayerZero Redeem Auto (v2.4 by thdx)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
-:root {
-  --bg:#f5fff7; --card:#ffffff; --mut:#cde6d3; --fld:#ecf8ed;
-  --acc:#34c759; --ok:#22c55e;
-}
-body {
-  margin:0; background:var(--bg); font-family:"Poppins",sans-serif;
-  color:#111; display:flex; flex-direction:column; align-items:center;
-}
-header {
-  display:flex; align-items:center; gap:10px;
-  padding:14px 20px; width:100%;
-  box-shadow:0 1px 4px rgba(0,0,0,.05); background:#fff;
-}
-header img { height:30px; }
-h1 { margin:0; font-size:18px; font-weight:600; color:#111; }
-.tabs { margin-top:20px; display:flex; gap:10px; }
-.tab {
-  background:#fff; border:1px solid var(--mut);
-  border-radius:8px; padding:8px 18px; cursor:pointer; font-weight:600;
-}
-.tab.active { background:var(--acc); color:#fff; border-color:var(--acc); }
-.card {
-  width:min(480px,90vw); background:var(--card);
-  border:1px solid var(--mut); border-radius:16px;
-  padding:22px; box-shadow:0 4px 10px rgba(0,0,0,.08); margin-top:20px;
-}
-input,button {
-  width:100%; padding:12px; margin-top:8px; border-radius:10px; font-size:15px;
-}
-input { border:1px solid var(--mut); background:var(--fld); }
-button {
-  border:0; font-weight:700; cursor:pointer; transition:.2s;
-}
-button.primary { background:linear-gradient(90deg,#34d058,#28a745); color:#fff; }
-button.ok { background:linear-gradient(90deg,#22c55e,#16a34a); color:#fff; }
-pre {
-  background:var(--fld); border:1px solid var(--mut);
-  border-radius:10px; padding:10px; margin-top:12px;
-  font-size:13px; white-space:pre-wrap;
-}
-footer { margin:30px 0 10px; color:#6b6b6b; font-size:14px; }
+body{background:#f6fff8;font-family:"Poppins",sans-serif;display:flex;flex-direction:column;align-items:center;min-height:100vh;margin:0;padding:40px;color:#222}
+.card{background:#fff;border:1px solid #c8e3ce;border-radius:16px;padding:24px;width:min(460px,90vw);box-shadow:0 5px 15px rgba(0,0,0,.1)}
+h2{color:#22c55e;margin-top:0;text-align:center;}
+input,button{width:100%;padding:12px;margin-top:8px;border-radius:10px;font-size:15px}
+input{border:1px solid #b9e1c2;background:#ecf8ed;color:#111}
+button{cursor:pointer;font-weight:700;border:0;transition:.2s}
+button.primary{background:linear-gradient(90deg,#34d058,#22c55e);color:#fff}
+pre{background:#ecf8ed;border:1px solid #b9e1c2;border-radius:10px;padding:10px;margin-top:14px;font-size:13px;white-space:pre-wrap;max-height:280px;overflow:auto}
+footer{margin-top:25px;color:#666;font-size:14px}
 </style>
 </head>
 <body>
-
-<header>
-  <img src="https://seeklogo.com/images/L/layerzero-logo-73E416FD9B-seeklogo.com.png" alt="LayerZero Logo">
-  <h1>Bridge Testnet Stable</h1>
-</header>
-
-<div class="tabs">
-  <div class="tab active" id="tabBridge">🌉 Bridge</div>
-  <div class="tab" id="tabRedeem">🔁 Redeem</div>
+<div class="card">
+  <h2>🔁 LayerZero Redeem Auto</h2>
+  <input id="txhash" placeholder="Masukkan LayerZero tx hash (0x...)" />
+  <input id="srcEid" value="30101" placeholder="srcEid (default: 30101)">
+  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" placeholder="Executor hash panjang atau address">
+  <input id="sender32" placeholder="sender32 (otomatis)">
+  <input id="payload" placeholder="payload (otomatis)">
+  <button id="connect" class="primary">🔌 Connect Wallet</button>
+  <button id="fetch" class="primary">🛰️ Auto Fetch</button>
+  <button id="redeem" class="primary">🚀 Redeem Sekarang</button>
+  <pre id="log">log siap...</pre>
 </div>
-
-<!-- Bridge Card -->
-<div class="card" id="bridgeCard">
-  <h2>🌉 Bridge USDT0 → Stable</h2>
-  <input id="amount" type="number" placeholder="Jumlah token (misal 10)" />
-  <button id="connectBridge" class="primary">🔌 Connect Wallet</button>
-  <button id="approve" class="primary" disabled>✅ Approve</button>
-  <button id="bridge" class="ok" disabled>🚀 Bridge Now</button>
-  <pre id="logBridge">log siap...</pre>
-</div>
-
-<!-- Redeem Card -->
-<div class="card" id="redeemCard" style="display:none">
-  <h2>🔁 Manual Redeem (LayerZero)</h2>
-  <input id="srcEid" value="30101" placeholder="srcEid (Sepolia)" />
-  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" />
-  <input id="sender32" value="0x000000000000000000000000cc1ae8cf5d3904cef3360a9532b477529b177cce" />
-  <input id="payload" value="0x0000000000000000000000004d02af17a29cda77416a1f60eae9092bb6d9c02600038d7ea4c68000" />
-  <button id="connectRedeem" class="primary">🔌 Connect Wallet</button>
-  <button id="redeem" class="ok">🚀 Send lzReceive()</button>
-  <pre id="logRedeem">log siap...</pre>
-</div>
-
 <footer>by thdx</footer>
 
 <script>
-const tabBridge=document.getElementById("tabBridge");
-const tabRedeem=document.getElementById("tabRedeem");
-const bridgeCard=document.getElementById("bridgeCard");
-const redeemCard=document.getElementById("redeemCard");
-tabBridge.onclick=()=>{tabBridge.classList.add("active");tabRedeem.classList.remove("active");bridgeCard.style.display="block";redeemCard.style.display="none";}
-tabRedeem.onclick=()=>{tabRedeem.classList.add("active");tabBridge.classList.remove("active");bridgeCard.style.display="none";redeemCard.style.display="block";}
-
-/* BRIDGE */
-function initBridge(){
-  const log=m=>{const el=document.getElementById("logBridge");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;}
-  const ERC20_ABI=["function approve(address,uint256) returns(bool)"];
-  const OFT_ABI=[
-    "function quoteSend((uint32,bytes32,uint256,uint256,bytes,bytes,bytes),bool)view returns(uint256 nativeFee,uint256 zroFee)",
-    "function send((uint32,bytes32,uint256,uint256,bytes,bytes,bytes),(uint256,uint256),address)payable"
-  ];
-  const adapter="0xc099cD946d5efCC35A99D64E808c1430cEf08126";
-  const token="0x78cf24370174180738c5b8e352b6d14c83a6c9a9";
-  const dstEid=40374;
-  let provider,signer,me;
-
-  async function connect(){
-    try{
-      if(!window.ethereum)throw new Error("MetaMask belum aktif");
-      provider=new ethers.providers.Web3Provider(window.ethereum,"any");
-      await provider.send("eth_requestAccounts",[]);
-      signer=provider.getSigner();me=await signer.getAddress();
-      log(`✅ Connected: ${me}`);
-      document.getElementById("approve").disabled=false;
-      document.getElementById("bridge").disabled=false;
-    }catch(e){log("❌ Connect error: "+(e.message||e));}
-  }
-
-  async function approve(){
-    try{
-      const amountStr=document.getElementById("amount").value.trim();
-      if(!amountStr)return log("⚠️ Masukkan jumlah token.");
-      const amount=ethers.utils.parseUnits(amountStr,"6");
-      const erc20=new ethers.Contract(token,ERC20_ABI,signer);
-      const tx=await erc20.approve(adapter,amount);
-      log(`⏳ TX: ${tx.hash}`);
-      await tx.wait();log("✅ Approve sukses!");
-    }catch(e){log("❌ Approve error: "+(e.message||e));}
-  }
-
-  async function bridgeNow(){
-    try{
-      const amountStr=document.getElementById("amount").value.trim();
-      if(!amountStr)return log("⚠️ Masukkan jumlah token.");
-      const amountLD=ethers.utils.parseUnits(amountStr,"6");
-      const me=await signer.getAddress();
-      const to32="0x"+me.replace(/^0x/,"").padStart(64,"0");
-      const oft=new ethers.Contract(adapter,OFT_ABI,signer);
-      const sendParam=[dstEid,to32,amountLD,amountLD,"0x","0x","0x"];
-      const fee=await oft.quoteSend(sendParam,false);
-      const nativeFee=ethers.BigNumber.isBigNumber(fee[0])?fee[0]:ethers.BigNumber.from(fee.nativeFee);
-      const tx=await oft.send(sendParam,[nativeFee,0],me,{value:nativeFee,gasLimit:350000});
-      log(`⏳ TX: ${tx.hash}`);await tx.wait();log("✅ Bridge sukses 🎉");
-    }catch(e){log("❌ Bridge error: "+(e.message||e));}
-  }
-
-  document.getElementById("connectBridge").onclick=connect;
-  document.getElementById("approve").onclick=approve;
-  document.getElementById("bridge").onclick=bridgeNow;
-}
-
-/* REDEEM */
-const logR=m=>{const el=document.getElementById("logRedeem");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;}
+const log=m=>{const el=document.getElementById("log");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;console.log(m);}
 const LZ_ABI4=["function lzReceive(uint32,bytes32,bytes,address) external"];
 const LZ_ABI3=["function lzReceive(uint32,bytes32,bytes) external"];
-let providerR,signerR,meR;
+let provider,signer,me;
 
-async function connectRedeem(){
+async function connect(){
   try{
-    providerR=new ethers.providers.Web3Provider(window.ethereum,"any");
-    await providerR.send("eth_requestAccounts",[]);
-    signerR=providerR.getSigner();meR=await signerR.getAddress();
-    const n=await providerR.getNetwork();
-    logR(`✅ Connected: ${meR}\nChain: ${n.chainId}`);
-  }catch(e){logR("❌ Connect error: "+(e.message||e));}
+    provider=new ethers.providers.Web3Provider(window.ethereum,"any");
+    await provider.send("eth_requestAccounts",[]);
+    signer=provider.getSigner();me=await signer.getAddress();
+    const n=await provider.getNetwork();
+    log(`✅ Connected: ${me}\nChain: ${n.chainId}`);
+  }catch(e){log("❌ Connect error: "+(e.message||e));}
 }
+
+async function fetchLZ(){
+  try{
+    const tx=$("txhash").value.trim();
+    if(!/^0x[0-9a-fA-F]{64}$/.test(tx))return log("⚠️ TX hash tidak valid.");
+    log("⏳ Fetching LayerZeroScan...");
+    const res=await fetch(`https://testnet.layerzeroscan.com/tx/${tx}`);
+    const html=await res.text();
+    const hexes=html.match(/0x[0-9a-fA-F]{64,}/g)||[];
+    const uniq=[...new Set(hexes)];
+    const sender=uniq.find(x=>x.length===66);
+    const payload=uniq.find(x=>x.length>66&&x.length%2===0);
+    if(sender){$("sender32").value=sender;log(`👤 sender32: ${sender}`);}else log("⚠️ sender32 tidak ditemukan");
+    if(payload){
+      $("payload").value=payload;log(`📦 payload: ${payload.slice(0,60)}...`);
+      try{
+        const [to,amt]=ethers.utils.defaultAbiCoder.decode(["address","uint256"],payload);
+        log(`🧪 Decoded → to=${to}, amount=${ethers.utils.formatUnits(amt,6)}`);
+      }catch{}
+    }else log("⚠️ payload tidak ditemukan");
+  }catch(e){log("❌ Fetch error: "+(e.message||e));}
+}
+
+function $(id){return document.getElementById(id);}
 
 async function redeem(){
   try{
-    const srcEid=Number(document.getElementById("srcEid").value.trim());
-    const sender=document.getElementById("sender32").value.trim();
-    const payload=document.getElementById("payload").value.trim();
-    let execRaw=document.getElementById("executor").value.trim().replace(/[^\da-fx]/gi,"").toLowerCase();
-    if(!/^0x[0-9a-f]{40}$/.test(execRaw))throw new Error("Executor tidak valid: "+execRaw);
+    const srcEid=Number($("srcEid").value.trim()||30101);
+    let execRaw=$("executor").value.trim().toLowerCase().replace(/[^0-9a-fx]/g,"");
+    if(execRaw.length>42)execRaw=execRaw.slice(0,42);
     const exec=ethers.utils.getAddress(execRaw);
-
-    if(!/^0x[0-9a-fA-F]{64}$/.test(sender)) return logR("⚠️ sender32 harus 32-byte hex.");
-    if(!/^0x[0-9a-fA-F]+$/.test(payload))   return logR("⚠️ payload harus hex 0x…");
-
-    const c4=new ethers.Contract(exec,LZ_ABI4,signerR);
-    const c3=new ethers.Contract(exec,LZ_ABI3,signerR);
-
+    const sender=$("sender32").value.trim(), payload=$("payload").value.trim();
+    if(!/^0x[0-9a-fA-F]{64}$/.test(sender))return log("⚠️ sender32 harus 32-byte hex");
+    if(!/^0x[0-9a-fA-F]+$/.test(payload))return log("⚠️ payload tidak valid (hex)");
+    const c4=new ethers.Contract(exec,LZ_ABI4,signer);
+    const c3=new ethers.Contract(exec,LZ_ABI3,signer);
     try{
-      logR(`🚀 Coba v4 (4 argumen): ${exec}`);
+      log(`🚀 Try v4 @ ${exec}`);
       const tx=await c4.lzReceive(srcEid,sender,payload,exec,{gasLimit:600000});
-      logR(`⏳ TX: ${tx.hash}`);
-      const rc=await tx.wait();
-      logR(`✅ Delivered v4 at block ${rc.blockNumber}`);
-      return;
+      log(`⏳ TX: ${tx.hash}`);const rc=await tx.wait();
+      log(`✅ Delivered v4 block ${rc.blockNumber}`);
     }catch(err1){
-      logR("⚠️ v4 gagal, coba versi 3 argumen...");
+      log("⚠️ v4 gagal, coba versi 3...");
       const tx2=await c3.lzReceive(srcEid,sender,payload,{gasLimit:600000});
-      logR(`⏳ TX: ${tx2.hash}`);
-      const rc2=await tx2.wait();
-      logR(`✅ Delivered v3 at block ${rc2.blockNumber}`);
+      log(`⏳ TX: ${tx2.hash}`);const rc2=await tx2.wait();
+      log(`✅ Delivered v3 block ${rc2.blockNumber}`);
     }
-  }catch(e){logR("❌ Redeem error: "+(e.data?.message||e.message||e));}
+  }catch(e){log("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
 
-document.getElementById("connectRedeem").onclick=connectRedeem;
-document.getElementById("redeem").onclick=redeem;
-
-window.addEventListener("load",initBridge);
+$("connect").onclick=connect;
+$("fetch").onclick=fetchLZ;
+$("redeem").onclick=redeem;
 </script>
 </body>
 </html>
