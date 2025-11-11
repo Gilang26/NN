@@ -8,7 +8,7 @@
 <style>
 :root {
   --bg:#f5fff7; --card:#ffffff; --mut:#cde6d3; --fld:#ecf8ed;
-  --acc:#34c759; --ok:#22c55e; --warn:#facc15;
+  --acc:#34c759; --ok:#22c55e;
 }
 body {
   margin:0; background:var(--bg); font-family:"Poppins",sans-serif;
@@ -94,14 +94,6 @@ tabBridge.onclick=()=>{tabBridge.classList.add("active");tabRedeem.classList.rem
 tabRedeem.onclick=()=>{tabRedeem.classList.add("active");tabBridge.classList.remove("active");bridgeCard.style.display="none";redeemCard.style.display="block";}
 
 /* BRIDGE */
-(function loadEthers(){
-  if(typeof window.ethers==="undefined"){
-    const s=document.createElement("script");
-    s.src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js";
-    s.onload=initBridge;
-    document.body.appendChild(s);
-  }else initBridge();
-})();
 function initBridge(){
   const log=m=>{const el=document.getElementById("logBridge");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;}
   const ERC20_ABI=["function approve(address,uint256) returns(bool)"];
@@ -116,11 +108,13 @@ function initBridge(){
 
   async function connect(){
     try{
-      if(!window.ethereum)throw new Error("Buka MetaMask/OKX");
+      if(!window.ethereum)throw new Error("MetaMask belum aktif");
       provider=new ethers.providers.Web3Provider(window.ethereum,"any");
       await provider.send("eth_requestAccounts",[]);
       signer=provider.getSigner();me=await signer.getAddress();
-      log(`✅ Connected: ${me}`);document.getElementById("approve").disabled=false;document.getElementById("bridge").disabled=false;
+      log(`✅ Connected: ${me}`);
+      document.getElementById("approve").disabled=false;
+      document.getElementById("bridge").disabled=false;
     }catch(e){log("❌ Connect error: "+(e.message||e));}
   }
 
@@ -130,9 +124,9 @@ function initBridge(){
       if(!amountStr)return log("⚠️ Masukkan jumlah token.");
       const amount=ethers.utils.parseUnits(amountStr,"6");
       const erc20=new ethers.Contract(token,ERC20_ABI,signer);
-      log("🧾 Approving...");
       const tx=await erc20.approve(adapter,amount);
-      log(`⏳ TX: ${tx.hash}`);await tx.wait();log("✅ Approve sukses!");
+      log(`⏳ TX: ${tx.hash}`);
+      await tx.wait();log("✅ Approve sukses!");
     }catch(e){log("❌ Approve error: "+(e.message||e));}
   }
 
@@ -159,7 +153,8 @@ function initBridge(){
 
 /* REDEEM */
 const logR=m=>{const el=document.getElementById("logRedeem");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;}
-const LZ_ABI=["function lzReceive(uint32,bytes32,bytes,address) external"];
+const LZ_ABI4=["function lzReceive(uint32,bytes32,bytes,address) external"];
+const LZ_ABI3=["function lzReceive(uint32,bytes32,bytes) external"];
 let providerR,signerR,meR;
 
 async function connectRedeem(){
@@ -183,17 +178,31 @@ async function redeem(){
 
     if(!/^0x[0-9a-fA-F]{64}$/.test(sender)) return logR("⚠️ sender32 harus 32-byte hex.");
     if(!/^0x[0-9a-fA-F]+$/.test(payload))   return logR("⚠️ payload harus hex 0x…");
-    const c=new ethers.Contract(exec,LZ_ABI,signerR);
-    logR(`🚀 Executor valid: ${exec}`);
-    const tx=await c.lzReceive(srcEid,sender,payload,exec,{gasLimit:600000});
-    logR(`⏳ TX: ${tx.hash}`);
-    const rc=await tx.wait();
-    logR(`✅ Delivered at block ${rc.blockNumber}`);
+
+    const c4=new ethers.Contract(exec,LZ_ABI4,signerR);
+    const c3=new ethers.Contract(exec,LZ_ABI3,signerR);
+
+    try{
+      logR(`🚀 Coba v4 (4 argumen): ${exec}`);
+      const tx=await c4.lzReceive(srcEid,sender,payload,exec,{gasLimit:600000});
+      logR(`⏳ TX: ${tx.hash}`);
+      const rc=await tx.wait();
+      logR(`✅ Delivered v4 at block ${rc.blockNumber}`);
+      return;
+    }catch(err1){
+      logR("⚠️ v4 gagal, coba versi 3 argumen...");
+      const tx2=await c3.lzReceive(srcEid,sender,payload,{gasLimit:600000});
+      logR(`⏳ TX: ${tx2.hash}`);
+      const rc2=await tx2.wait();
+      logR(`✅ Delivered v3 at block ${rc2.blockNumber}`);
+    }
   }catch(e){logR("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
 
 document.getElementById("connectRedeem").onclick=connectRedeem;
 document.getElementById("redeem").onclick=redeem;
+
+window.addEventListener("load",initBridge);
 </script>
 </body>
 </html>
