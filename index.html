@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>LayerZero Redeem v2.7 (Auto-Fill Fix)</title>
+<title>LayerZero Redeem (Final Offline Fix)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
 body {
@@ -63,39 +63,31 @@ pre {
   max-height: 300px;
   overflow: auto;
 }
-footer {
-  margin-top: 25px;
-  color: #666;
-  font-size: 14px;
-}
+footer {margin-top:25px;color:#666;font-size:14px;}
 </style>
 </head>
 <body>
 <div class="card">
-  <h2>🔁 LayerZero Redeem (v2.7)</h2>
-  <input id="txhash" placeholder="Masukkan LayerZero TX hash (0x...)" />
-  <input id="srcEid" value="30101" placeholder="srcEid (contoh: 30101)" />
-  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" placeholder="Executor (hash panjang atau address)" />
-  <input id="sender32" placeholder="sender32 (otomatis)" />
-  <input id="payload" placeholder="payload (otomatis)" />
-  <input id="amount" value="10" placeholder="Jumlah token (default 10 USDT)" />
+  <h2>🔁 LayerZero Redeem (Final)</h2>
+  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" placeholder="Executor" />
+  <input id="amount" value="10" placeholder="Jumlah token (default 10)" />
   <button id="connect" class="primary">🔌 Connect Wallet</button>
-  <button id="fetch" class="primary">🛰️ Auto Fetch Payload</button>
+  <button id="build" class="primary">🧱 Build sender32 + payload</button>
   <button id="redeem" class="primary">🚀 Redeem Sekarang</button>
   <pre id="log">log siap...</pre>
 </div>
 <footer>by thdx</footer>
 
 <script>
-const log = (m)=>{const el=document.getElementById("log");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;console.log(m);}
+const log = m=>{const el=document.getElementById("log");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;console.log(m);}
 const LZ_ABI4=["function lzReceive(uint32,bytes32,bytes,address) external"];
 const LZ_ABI3=["function lzReceive(uint32,bytes32,bytes) external"];
 let provider,signer,me;
-
-const toBytes32 = (addr)=>"0x"+addr.replace(/^0x/,"").padStart(64,"0");
-const buildPayload = (to,amt)=>ethers.utils.defaultAbiCoder.encode(["address","uint256"],[ethers.utils.getAddress(to),ethers.utils.parseUnits(String(amt),"6")]);
-
-function $(id){return document.getElementById(id);}
+const SRC_EID=30101; // Sepolia -> Stable
+const toBytes32=a=>"0x"+a.replace(/^0x/,"").padStart(64,"0");
+const buildPayload=(to,amt)=>ethers.utils.defaultAbiCoder.encode(
+  ["address","uint256"],[ethers.utils.getAddress(to),ethers.utils.parseUnits(String(amt),"6")]
+);
 
 async function connect(){
   try{
@@ -108,71 +100,35 @@ async function connect(){
   }catch(e){log("❌ Connect error: "+(e.message||e));}
 }
 
-async function fetchLZ(){
+async function buildAuto(){
   try{
-    const tx=$("txhash").value.trim();
-    if(!/^0x[0-9a-fA-F]{64}$/.test(tx)) return log("⚠️ TX hash tidak valid.");
-    log("⏳ Fetching LayerZeroScan JSON...");
-    const urls=[
-      `https://api.testnet.layerzeroscan.com/api/tx/${tx}`,
-      `https://testnet.layerzeroscan.com/api/tx/${tx}`,
-      `https://api-testnet.layerzeroscan.com/api/tx/${tx}`
-    ];
-    let data=null;
-    for(const u of urls){
-      try{
-        const r=await fetch(u);
-        if(r.ok){data=await r.json();if(data)break;}
-      }catch{}
-    }
-
-    if(data && data.payload){
-      $("sender32").value=data.srcUaAddress || data.srcUa || toBytes32(me);
-      $("payload").value=data.payload;
-      log(`✅ JSON found! sender32 & payload terisi.`);
-      try{
-        const [to,amt]=ethers.utils.defaultAbiCoder.decode(["address","uint256"],data.payload);
-        log(`🧪 Decoded → to=${to}, amount=${ethers.utils.formatUnits(amt,6)}`);
-      }catch{}
-    } else {
-      log("⚠️ sender32/payload tidak ditemukan, isi otomatis...");
-      $("sender32").value = toBytes32(me);
-      const amt = $("amount").value.trim() || "10";
-      $("payload").value = buildPayload(me, amt);
-      log(`👤 sender32: ${$("sender32").value}`);
-      log(`📦 payload: ${$("payload").value.slice(0,66)}...`);
-    }
-  }catch(e){log("❌ Fetch error: "+(e.message||e));}
+    if(!me)return log("⚠️ Hubungkan wallet dulu.");
+    const amt=document.getElementById("amount").value.trim()||"10";
+    const sender32=toBytes32(me);
+    const payload=buildPayload(me,amt);
+    window.sender32=sender32;
+    window.payload=payload;
+    log(`✅ Auto built sender32 & payload`);
+    log(`👤 sender32: ${sender32}`);
+    log(`📦 payload: ${payload.slice(0,66)}...`);
+  }catch(e){log("❌ Build error: "+(e.message||e));}
 }
 
-async function redeem(){
+async function redeemNow(){
   try{
-    const srcEid=Number($("srcEid").value.trim()||30101);
-    let execRaw=$("executor").value.trim().toLowerCase().replace(/[^0-9a-fx]/g,"");
-    if(execRaw.length>42){
-      const shortened=execRaw.slice(0,42);
-      log(`ℹ️ Executor dipotong otomatis ke: ${shortened}`);
-      execRaw=shortened;
-    }
-    const exec=ethers.utils.getAddress(execRaw);
-    const sender=$("sender32").value.trim();
-    const payload=$("payload").value.trim();
-
-    if(!/^0x[0-9a-fA-F]{64}$/.test(sender)) return log("⚠️ sender32 harus 32-byte hex.");
-    if(!/^0x[0-9a-fA-F]+$/.test(payload)) return log("⚠️ payload tidak valid (hex).");
-
+    if(!window.sender32||!window.payload)return log("⚠️ Build dulu sebelum redeem.");
+    const exec=document.getElementById("executor").value.trim();
     const c4=new ethers.Contract(exec,LZ_ABI4,signer);
     const c3=new ethers.Contract(exec,LZ_ABI3,signer);
-
     try{
       log(`🚀 Coba lzReceive v4 @ ${exec}`);
-      const tx=await c4.lzReceive(srcEid,sender,payload,exec,{gasLimit:600000});
+      const tx=await c4.lzReceive(SRC_EID,window.sender32,window.payload,exec,{gasLimit:600000});
       log(`⏳ TX: ${tx.hash}`);
       const rc=await tx.wait();
       log(`✅ Redeem sukses di block ${rc.blockNumber}`);
     }catch(err1){
-      log("⚠️ Versi v4 gagal, mencoba fallback v3...");
-      const tx2=await c3.lzReceive(srcEid,sender,payload,{gasLimit:600000});
+      log("⚠️ Versi v4 gagal, coba v3...");
+      const tx2=await c3.lzReceive(SRC_EID,window.sender32,window.payload,{gasLimit:600000});
       log(`⏳ TX: ${tx2.hash}`);
       const rc2=await tx2.wait();
       log(`✅ Redeem v3 sukses di block ${rc2.blockNumber}`);
@@ -180,9 +136,9 @@ async function redeem(){
   }catch(e){log("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
 
-$("connect").onclick=connect;
-$("fetch").onclick=fetchLZ;
-$("redeem").onclick=redeem;
+document.getElementById("connect").onclick=connect;
+document.getElementById("build").onclick=buildAuto;
+document.getElementById("redeem").onclick=redeemNow;
 </script>
 </body>
 </html>
