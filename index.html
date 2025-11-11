@@ -1,9 +1,9 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>LayerZero Manual Redeem v2.5 (Final)</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>LayerZero Redeem v2.6 (Hybrid Auto-Fetch JSON)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 <style>
 body {
@@ -18,19 +18,20 @@ body {
   margin: 0;
 }
 .card {
-  background: #ffffff;
+  background: #fff;
   border: 1px solid #c8e3ce;
   border-radius: 16px;
   padding: 24px;
   width: min(480px, 90vw);
-  box-shadow: 0 4px 15px rgba(0,0,0,.08);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
 }
 h2 {
   color: #22c55e;
   text-align: center;
   margin-top: 0;
 }
-input, button {
+input,
+button {
   width: 100%;
   padding: 12px;
   margin-top: 8px;
@@ -49,7 +50,7 @@ button {
   transition: 0.2s;
 }
 button.primary {
-  background: linear-gradient(90deg,#34d058,#22c55e);
+  background: linear-gradient(90deg, #34d058, #22c55e);
   color: #fff;
 }
 pre {
@@ -72,17 +73,15 @@ footer {
 </head>
 <body>
 <div class="card">
-  <h2>🔁 LayerZero Manual Redeem (v2.5)</h2>
-
+  <h2>🔁 LayerZero Redeem (v2.6)</h2>
   <input id="txhash" placeholder="Masukkan LayerZero TX hash (0x...)" />
-  <input id="srcEid" value="30101" placeholder="srcEid (contoh: 30101)">
-  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" placeholder="Executor (hash panjang atau address)">
-  <input id="sender32" placeholder="sender32 (otomatis)">
-  <input id="payload" placeholder="payload (otomatis)">
+  <input id="srcEid" value="30101" placeholder="srcEid (contoh: 30101)" />
+  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de1adb90d393701583c4b11f79" placeholder="Executor (hash panjang atau address)" />
+  <input id="sender32" placeholder="sender32 (otomatis)" />
+  <input id="payload" placeholder="payload (otomatis)" />
   <button id="connect" class="primary">🔌 Connect Wallet</button>
   <button id="fetch" class="primary">🛰️ Auto Fetch Payload</button>
   <button id="redeem" class="primary">🚀 Redeem Sekarang</button>
-
   <pre id="log">log siap...</pre>
 </div>
 <footer>by thdx</footer>
@@ -110,14 +109,44 @@ async function fetchLZ(){
   try{
     const tx=$("txhash").value.trim();
     if(!/^0x[0-9a-fA-F]{64}$/.test(tx)) return log("⚠️ TX hash tidak valid.");
-    log("⏳ Fetching LayerZeroScan...");
+    log("⏳ Fetching LayerZeroScan JSON...");
+
+    // Try JSON API first
+    const urls=[
+      `https://api.testnet.layerzeroscan.com/api/tx/${tx}`,
+      `https://testnet.layerzeroscan.com/api/tx/${tx}`,
+      `https://api-testnet.layerzeroscan.com/api/tx/${tx}`
+    ];
+    let data=null;
+    for(const u of urls){
+      try{
+        const r=await fetch(u);
+        if(r.ok){data=await r.json();if(data)break;}
+      }catch{}
+    }
+
+    if(data && data.payload){
+      $("sender32").value=data.srcUaAddress || data.srcUa || "";
+      $("payload").value=data.payload;
+      log(`✅ JSON found!`);
+      log(`👤 sender32: ${$("sender32").value}`);
+      log(`📦 payload: ${$("payload").value.slice(0,66)}...`);
+      try{
+        const [to,amt]=ethers.utils.defaultAbiCoder.decode(["address","uint256"],data.payload);
+        log(`🧪 Decoded → to=${to}, amount=${ethers.utils.formatUnits(amt,6)}`);
+      }catch{}
+      return;
+    }
+
+    // fallback HTML scraping
+    log("⚠️ JSON API tidak ada data, fallback HTML...");
     const res=await fetch(`https://testnet.layerzeroscan.com/tx/${tx}`);
     const html=await res.text();
     const hexes=html.match(/0x[0-9a-fA-F]{64,}/g)||[];
     const uniq=[...new Set(hexes)];
     const sender=uniq.find(x=>x.length===66);
     const payload=uniq.find(x=>x.length>66&&x.length%2===0);
-    if(sender){$("sender32").value=sender;log(`👤 sender32: ${sender}`);} else log("⚠️ sender32 tidak ditemukan.");
+    if(sender){$("sender32").value=sender;log(`👤 sender32: ${sender}`);} else log("⚠️ sender32 tidak ditemukan");
     if(payload){
       $("payload").value=payload;
       log(`📦 payload: ${payload.slice(0,60)}...`);
@@ -125,7 +154,7 @@ async function fetchLZ(){
         const [to,amt]=ethers.utils.defaultAbiCoder.decode(["address","uint256"],payload);
         log(`🧪 Decoded → to=${to}, amount=${ethers.utils.formatUnits(amt,6)}`);
       }catch{}
-    } else log("⚠️ payload tidak ditemukan.");
+    } else log("⚠️ payload tidak ditemukan");
   }catch(e){log("❌ Fetch error: "+(e.message||e));}
 }
 
@@ -164,9 +193,9 @@ async function redeem(){
   }catch(e){log("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
 
-$("connect").onclick=connect;
-$("fetch").onclick=fetchLZ;
-$("redeem").onclick=redeem;
+document.getElementById("connect").onclick=connect;
+document.getElementById("fetch").onclick=fetchLZ;
+document.getElementById("redeem").onclick=redeem;
 </script>
 </body>
 </html>
