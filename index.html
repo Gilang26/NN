@@ -1,45 +1,149 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>LayerZero Redeem Final</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+<style>
+body {
+  font-family: "Poppins", sans-serif;
+  background: #f6fff8;
+  color: #111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  margin: 0;
+}
+.card {
+  background: #fff;
+  border: 1px solid #c8e3ce;
+  border-radius: 16px;
+  padding: 24px;
+  width: min(500px, 92vw);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+h2 {
+  color: #22c55e;
+  text-align: center;
+  margin-top: 0;
+}
+input, button {
+  width: 100%;
+  padding: 12px;
+  margin-top: 8px;
+  border-radius: 10px;
+  font-size: 15px;
+}
+input {
+  border: 1px solid #b9e1c2;
+  background: #ecf8ed;
+  color: #111;
+}
+button {
+  cursor: pointer;
+  font-weight: 700;
+  border: 0;
+  transition: 0.2s;
+}
+button.primary {
+  background: linear-gradient(90deg,#34d058,#22c55e);
+  color: #fff;
+}
+pre {
+  background: #ecf8ed;
+  border: 1px solid #b9e1c2;
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 14px;
+  font-size: 13px;
+  white-space: pre-wrap;
+  max-height: 300px;
+  overflow: auto;
+}
+footer {margin-top:25px;color:#666;font-size:14px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="card">
+  <h2>🔁 LayerZero Redeem</h2>
+  <input id="executor" value="0xab329959fe048721cdf7f13a3eb43e4fc549a9de,0xcAB8F3ed8528655E0C2fad1C504c6CfEccf50B90,0x362fca37E45fe1096b42021b543f462D49a5C8df" placeholder="Executor (boleh banyak, pisah koma)" />
+  <input id="amount" value="10" placeholder="Jumlah token (default 10)" />
+  <button id="connect" class="primary">🔌 Connect Wallet</button>
+  <button id="build" class="primary">🧱 Build sender32 + payload</button>
+  <button id="redeem" class="primary">🚀 Redeem Sekarang</button>
+  <pre id="log">log siap...</pre>
+</div>
+<footer>by thdx</footer>
+
 <script>
-function sanitizeExecutors(input) {
-  // dukung banyak executor dipisah koma, auto-potong 20-byte & checksum
-  return input.split(",").map(s => s.trim())
-    .filter(Boolean)
-    .map(s => {
-      let r = s.toLowerCase().replace(/[^0-9a-fx]/g, "");
-      if (!r.startsWith("0x")) r = "0x" + r;
-      if (r.length > 42) r = r.slice(0, 42);     // auto-truncate ke 20-byte
-      return ethers.utils.getAddress(r);         // checksum & validasi
-    });
+const log = m=>{const el=document.getElementById("log");el.textContent+=(el.textContent?"\n":"")+m;el.scrollTop=el.scrollHeight;console.log(m);}
+let provider,signer,me;
+const SRC_EID=30101; // Sepolia -> Stable
+const toBytes32=a=>"0x"+a.replace(/^0x/,"").padStart(64,"0");
+const buildPayload=(to,amt)=>ethers.utils.defaultAbiCoder.encode(
+  ["address","uint256"],[ethers.utils.getAddress(to),ethers.utils.parseUnits(String(amt),"6")]
+);
+
+async function connect(){
+  try{
+    provider=new ethers.providers.Web3Provider(window.ethereum,"any");
+    await provider.send("eth_requestAccounts",[]);
+    signer=provider.getSigner();
+    me=await signer.getAddress();
+    const n=await provider.getNetwork();
+    log(`✅ Connected: ${me}\nChain: ${n.chainId}`);
+  }catch(e){log("❌ Connect error: "+(e.message||e));}
+}
+
+async function buildAuto(){
+  try{
+    if(!me)return log("⚠️ Hubungkan wallet dulu.");
+    const amt=document.getElementById("amount").value.trim()||"10";
+    const sender32=toBytes32(me);
+    const payload=buildPayload(me,amt);
+    window.sender32=sender32;
+    window.payload=payload;
+    log(`✅ Auto built sender32 & payload`);
+    log(`👤 sender32: ${sender32}`);
+    log(`📦 payload: ${payload.slice(0,66)}...`);
+  }catch(e){log("❌ Build error: "+(e.message||e));}
+}
+
+function sanitizeExecutors(input){
+  return input.split(",").map(s=>s.trim()).filter(Boolean).map(s=>{
+    let r=s.toLowerCase().replace(/[^0-9a-fx]/g,"");
+    if(!r.startsWith("0x"))r="0x"+r;
+    if(r.length>42)r=r.slice(0,42);
+    return ethers.utils.getAddress(r);
+  });
 }
 
 async function redeemNow(){
   try{
-    if(!window.sender32 || !window.payload) return log("⚠️ Build dulu sebelum redeem.");
+    if(!window.sender32||!window.payload)return log("⚠️ Build dulu sebelum redeem.");
+    const list=sanitizeExecutors(document.getElementById("executor").value);
+    const ABI4=["function lzReceive(uint32,bytes32,bytes,address) external"];
+    const ABI3=["function lzReceive(uint32,bytes32,bytes) external"];
 
-    const SRC_EID = 30101;
-    const list = sanitizeExecutors(document.getElementById("executor").value);
-
-    if(!/^0x[0-9a-fA-F]{64}$/.test(window.sender32)) return log("⚠️ sender32 harus 32-byte hex.");
-    if(!/^0x[0-9a-fA-F]+$/.test(window.payload))     return log("⚠️ payload tidak valid (hex).");
-
-    const ABI4 = ["function lzReceive(uint32,bytes32,bytes,address) external"];
-    const ABI3 = ["function lzReceive(uint32,bytes32,bytes) external"];
-
-    for (const exec of list){
+    for(const exec of list){
       try{
         log(`🚀 Coba v4 @ ${exec}`);
-        const c4 = new ethers.Contract(exec, ABI4, signer);
-        const tx = await c4.lzReceive(SRC_EID, window.sender32, window.payload, exec, { gasLimit: 600000 });
+        const c4=new ethers.Contract(exec,ABI4,signer);
+        const tx=await c4.lzReceive(SRC_EID,window.sender32,window.payload,exec,{gasLimit:600000});
         log(`⏳ TX: ${tx.hash}`);
-        const rc = await tx.wait();
+        const rc=await tx.wait();
         log(`✅ Delivered v4 di block ${rc.blockNumber} via ${exec}`);
         return;
       }catch(e1){
         log(`⚠️ v4 gagal @ ${exec}, coba v3...`);
         try{
-          const c3 = new ethers.Contract(exec, ABI3, signer);
-          const tx2 = await c3.lzReceive(SRC_EID, window.sender32, window.payload, { gasLimit: 600000 });
+          const c3=new ethers.Contract(exec,ABI3,signer);
+          const tx2=await c3.lzReceive(SRC_EID,window.sender32,window.payload,{gasLimit:600000});
           log(`⏳ TX: ${tx2.hash}`);
-          const rc2 = await tx2.wait();
+          const rc2=await tx2.wait();
           log(`✅ Delivered v3 di block ${rc2.blockNumber} via ${exec}`);
           return;
         }catch(e2){
@@ -48,8 +152,12 @@ async function redeemNow(){
       }
     }
     log("❌ Semua executor gagal. Coba executor lain atau tunggu relayer resmi.");
-  }catch(e){
-    log("❌ Redeem error: " + (e.data?.message || e.message || e));
-  }
+  }catch(e){log("❌ Redeem error: "+(e.data?.message||e.message||e));}
 }
+
+document.getElementById("connect").onclick=connect;
+document.getElementById("build").onclick=buildAuto;
+document.getElementById("redeem").onclick=redeemNow;
 </script>
+</body>
+</html>
